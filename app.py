@@ -1,8 +1,6 @@
 #!/usr/bin/python3
 
 import openpyxl
-import matplotlib.pyplot as plt
-import numpy as np
 
 SEKTORS_HEADER = "SEKTOR"
 ETFS_HEADERS = ["ETF","ISIN","POSITION","TICKER","TITEL","SEKTOR","PERCENT"]
@@ -28,6 +26,8 @@ def get_sectors(ws):
     sectors_li = get_contiguous_range(ws)
     sectors = []
     for sector in sectors_li:
+        if sector[0] is None:
+            break
         sectors.append(sector[0])
     if sectors[0] != SEKTORS_HEADER:
         raise Exception('SEKTORS sheet has illegal header in cell A1')
@@ -69,53 +69,60 @@ def calculate(sectors, etfs, portfolio):
     :param portfolio: list of lists with portfolio data
     :return: list of lists with total investments per sector
     """
-    # build values, one for each sector
-    values = []
-    for sector in sectors:
-        values.append(list((sector, 0)))
-    # add values from the portfolio
-    for item in portfolio:
-        sec = item[4] # item sector
-        val = item[5] # item value
-        if sec != 'ETF':
-            # stock in portfolio
-            idx = sectors.index(sec)
-            values[idx][1] += val # add value array
-        else:
-            # exchange traded fund in portfolio
-            tit = item[1] # etf titel
-            for row in etfs:
-                 if row[0] == tit:
-                     # rows with sectors in the exchange traded fund
-                     sect = row[5] # etf row sector
-                     pct = row[6]  # etf row percentage
-                     frac = int(val*pct/100) # calculate etf row fraction of value
-                     idx = sectors.index(sect)
-                     values[idx][1] += frac # add fraction to array
-                 pass
+    try:
+        # build values, one for each sector
+        values = []
+        for sector in sectors:
+            values.append(list((sector, 0)))
+        # add values from the portfolio
+        for item in portfolio:
+            if item[0] is None:
+                break
+            sec = item[4] # item sector
+            val = item[5] # item value
+            if sec != 'ETF':
+                # stock in portfolio
+                idx = sectors.index(sec)
+                values[idx][1] += val # add value array
+            else:
+                # exchange traded fund in portfolio
+                tit = item[1] # etf titel
+                for row in etfs:
+                     if row[0] == tit:
+                         # rows with sectors in the exchange traded fund
+                         sect = row[5] # etf row sector
+                         pct = row[6]  # etf row percentage
+                         frac = int(val*pct/100) # calculate etf row fraction of value
+                         idx = sectors.index(sect)
+                         values[idx][1] += frac # add fraction to array
+                     pass
+                pass
             pass
-        pass
-    return values
+        return values
+    except TypeError:
+        print('Shit happens')
+    except:
+        print('More shit')
 
-def display_pie_chart(values):
+
+def display_in_workbook(source_file, wb, values):
     """
-    display the investments per sector in a pie chart
+    display the investments per sector in sheet SEKTOR
+    :param values: workbook, write enabled
     :param values: list of lists with total investments per sector
     :return: None
     """
-    my_values = []
-    my_labels = []
-    for item in values:
-        my_values.append(item[1])
-        my_labels.append(item[0])
-    vals = np.array(my_values)
-    plt.pie(vals, labels = my_labels)
-    plt.show()
+    print(values)
+    ws = wb["SEKTORS"]
+    for y in range(2, len(values)+2, 1):
+        ws.cell(row=y, column=2).value = values[y-2][1]
+    wb.save(source_file)
+    pass
 
 def run(source_file):
     try:
         # open workbook
-        wb = openpyxl.load_workbook(source_file, read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(source_file, read_only=False, data_only=True)
         # SEKTORS ====
         sectors_ws = wb["SEKTORS"]
         sectors = get_sectors(sectors_ws)
@@ -127,7 +134,7 @@ def run(source_file):
         portfolio = get_portfolio(portfolio_ws)
         # CALCULATION ====
         values = calculate(sectors, etfs, portfolio)
-        display_pie_chart(  values)
+        display_in_workbook(source_file, wb, values)
         exit(0)
     except Exception as err:
         print(err.args)
